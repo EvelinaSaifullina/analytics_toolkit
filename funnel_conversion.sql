@@ -1,19 +1,21 @@
--- Воронка конверсии по этапам (на уровне сессий или пользователей)
--- Адаптируй под свои названия таблиц и этапы
-
-WITH stage_counts AS (
+WITH session_events AS (
     SELECT 
-        COUNT(DISTINCT CASE WHEN event_type = 'view' THEN session_id END) AS step1_view,
-        COUNT(DISTINCT CASE WHEN event_type = 'add_to_cart' THEN session_id END) AS step2_cart,
-        COUNT(DISTINCT CASE WHEN event_type = 'purchase' THEN session_id END) AS step3_purchase
-    FROM events
-    WHERE campaign_id = 1  -- фильтр по эксперименту
+        session_id,
+        MAX(CASE WHEN event_type = 'product_view' THEN 1 ELSE 0 END) AS has_view,
+        MAX(CASE WHEN event_type = 'add_to_cart' THEN 1 ELSE 0 END) AS has_cart,
+        MAX(CASE WHEN event_type = 'checkout' THEN 1 ELSE 0 END) AS has_checkout,
+        MAX(CASE WHEN event_type = 'purchase' THEN 1 ELSE 0 END) AS has_purchase
+    FROM events_clean
+    WHERE event_date BETWEEN '2024-05-01' AND '2024-05-31'
+    GROUP BY session_id
 )
 SELECT 
-    step1_view AS start,
-    step2_cart AS cart,
-    step3_purchase AS purchase,
-    ROUND(100.0 * step2_cart / step1_view, 2) AS view_to_cart_pct,
-    ROUND(100.0 * step3_purchase / step2_cart, 2) AS cart_to_purchase_pct,
-    ROUND(100.0 * step3_purchase / step1_view, 2) AS view_to_purchase_pct
-FROM stage_counts;
+    COUNT(session_id) AS total_sessions,
+    SUM(has_view) AS view_sessions,
+    SUM(has_cart) AS cart_sessions,
+    SUM(has_checkout) AS checkout_sessions,
+    SUM(has_purchase) AS purchase_sessions,
+    ROUND(100.0 * SUM(has_purchase) / COUNT(session_id), 2) AS overall_conversion,
+    ROUND(100.0 * SUM(has_purchase) / SUM(has_view), 2) AS view_to_purchase_conversion,
+    ROUND(100.0 * SUM(has_purchase) / SUM(has_cart), 2) AS cart_to_purchase_conversion
+FROM session_events;
